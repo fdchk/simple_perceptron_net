@@ -212,7 +212,7 @@ fn plot_decision(net: &Network) -> Result<(), Box<dyn std::error::Error>> {
 
 fn main() {
     let mut net = Network::new(0.5);
-    net.add_layer(Layer::new(2, 2, Activation::Sigmoid)); // output layer: 1 neuron
+    // net.add_layer(Layer::new(2, 2, Activation::Sigmoid)); // output layer: 1 neuron
     net.add_layer(Layer::new(1, 2, Activation::Sigmoid)); // output layer: 1 neuron
 
         // matrix example
@@ -226,9 +226,9 @@ fn main() {
 
         // XOR example
     let training_data = vec![
-        (vec![0.0, 0.0], vec![1.0]),
-        (vec![0.0, 1.0], vec![0.0]),
-        (vec![1.0, 0.0], vec![0.0]),
+        (vec![0.0, 0.0], vec![0.0]),
+        (vec![0.0, 1.0], vec![0.5]),
+        (vec![1.0, 0.0], vec![0.5]),
         (vec![1.0, 1.0], vec![1.0]),
     ];
 
@@ -249,6 +249,18 @@ fn main() {
     for (inputs, _) in &training_data {
         let output = net.forward(inputs.clone());
         println!("{:?} -> {:?}", inputs, output);
+    }
+    println!("mapped predictions:");
+    let zero_range = 0.33..0.66;
+    let mut mapped_output;
+    for (inputs, _) in &training_data {
+        let output = net.forward(inputs.clone())[0];
+        if zero_range.contains(&output) {
+            mapped_output = 1;
+        } else {
+            mapped_output = 0;
+        }
+        println!("{:?} -> {:?}", inputs, mapped_output);
     }
 plot_decision(&net).unwrap();
 
