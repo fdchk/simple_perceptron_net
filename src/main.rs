@@ -1,5 +1,4 @@
-use std::{thread::sleep, time::Duration};
-
+use std::{io, time::Instant};
 use plotters::{prelude::*};
 use rand::Rng;
 
@@ -20,6 +19,54 @@ impl Activation {
             Activation::Sigmoid => output * (1.0-output),
         }
     }
+}
+
+struct Architecture {
+    layer_count: u32,
+    input_params_count: u32,
+    hidden_neurons_count: u32,
+    hidden_layers_count: u32,
+    output_neurons_count: u32,
+    epochs: u64
+}
+
+impl Architecture {
+    fn init(
+    ) -> Self {
+        let layer_count: u32;
+        let input_params_count: u32;
+        let hidden_neurons_count: u32;
+        let output_neurons_count: u32;
+        let epochs: u64;
+        println!("Network arch wizard");
+        println!("--------------------");
+        input_params_count = query_user("Enter number of input parameters: (bundled data requires 2, asserted for now)") as u32;
+        assert_eq!(input_params_count, 2);
+        layer_count = query_user("Total layer count: (2 is sufficient)") as u32;
+        hidden_neurons_count = query_user("Neurons on hidden layers: (2 should be enough for XOR)") as u32;
+        output_neurons_count = query_user("Output count: (bundled data requires 1, asserted for now)") as u32;
+        assert_eq!(output_neurons_count, 1);
+        epochs = query_user("Train for how many epochs: (go ham, limit is u64)");
+
+        let hidden_layers_count = layer_count - 2;
+
+        Architecture{
+            layer_count,
+            input_params_count,
+            hidden_neurons_count,
+            hidden_layers_count,
+            output_neurons_count,
+            epochs
+        }
+    }
+}
+
+fn query_user(question: &str) -> u64 {
+    let mut buffer: String = String::new();
+    println!("{}", question);
+    io::stdin().read_line(&mut buffer).expect("Failed to read input");
+    let output = buffer.trim().parse::<u64>().expect("Failed to parse input");
+    output
 }
 
 struct Perceptron {
@@ -96,6 +143,20 @@ struct Network {
 impl Network {
     fn new(learning_rate: f64) -> Self {
         Network { layers: Vec::new(), learning_rate }
+    }
+
+    fn print_stats(&self) {
+        println!("Network conf:");
+        println!("------------------");
+        println!("Layers:");
+        println!("------------------");
+        for (i, layer) in self.layers.iter().enumerate() {
+            println!("  Layer {}", i);
+            println!("  Neurons: {}", layer.neurons.len().to_string());
+            let params: usize = layer.neurons.iter().map(|n| n.weights.len()).sum();
+            println!("  Trainable params: {}", params.to_string());
+            println!("------------------");
+        }
     }
 
     fn add_layer(&mut self, layer: Layer) {
@@ -179,8 +240,9 @@ fn color_from_value(v: f64) -> RGBColor {
     RGBColor(r, g, b)
 }
 
-fn plot_decision(net: &Network) -> Result<(), Box<dyn std::error::Error>> {
-    let root = BitMapBackend::new("decision.png", (400, 400)).into_drawing_area();
+fn plot_decision(net: &Network, epoch: i32) -> Result<(), Box<dyn std::error::Error>> {
+    let filename = format!("decision_{}.png", epoch);
+    let root = BitMapBackend::new(&filename, (400, 400)).into_drawing_area();
     root.fill(&RGBColor(50u8,50u8,50u8))?;
 
     let mut chart = ChartBuilder::on(&root)
@@ -205,43 +267,79 @@ fn plot_decision(net: &Network) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     root.present()?;
-    println!("Decision plot saved to decision.png");
+    println!("Decision plot saved to {}", &filename);
     Ok(())
 }
 
-
 fn main() {
+    let arch = Architecture::init();
     let mut net = Network::new(0.5);
-    // net.add_layer(Layer::new(2, 2, Activation::Sigmoid)); // output layer: 1 neuron
-    net.add_layer(Layer::new(1, 2, Activation::Sigmoid)); // output layer: 1 neuron
 
-        // matrix example
-    // let training_data = vec![
-    //     (vec![0.0, 0.0],  vec![1.0]), (vec![0.0, 0.25],  vec![0.0]), (vec![0.0, 0.5],  vec![1.0]), (vec![0.0, 0.75],  vec![1.0]), (vec![0.0, 1.0],  vec![1.0]),
-    //     (vec![0.25, 0.0], vec![1.0]), (vec![0.25, 0.25], vec![0.0]), (vec![0.25, 0.5], vec![1.0]), (vec![0.25, 0.75], vec![0.0]), (vec![0.25, 1.0], vec![1.0]),
-    //     (vec![0.5, 0.0],  vec![1.0]), (vec![0.5, 0.25],  vec![0.0]), (vec![0.5, 0.5],  vec![1.0]), (vec![0.5, 0.75],  vec![0.0]), (vec![0.5, 1.0],  vec![1.0]),
-    //     (vec![0.75, 0.0], vec![1.0]), (vec![0.75, 0.25], vec![0.0]), (vec![0.75, 0.5], vec![0.0]), (vec![0.75, 0.75], vec![0.0]), (vec![0.75, 1.0], vec![1.0]),
-    //     (vec![1.0, 0.0],  vec![1.0]), (vec![1.0, 0.25],  vec![1.0]), (vec![1.0, 0.5],  vec![1.0]), (vec![1.0, 0.75],  vec![1.0]), (vec![1.0, 1.0],  vec![1.0]),
-    // ];
+    net.add_layer(Layer::new(arch.hidden_neurons_count as usize, arch.input_params_count as usize, Activation::Sigmoid)); // layer 1, input params -> hidden_neur
+    for layer in 0..arch.hidden_layers_count {
+        net.add_layer(Layer::new(arch.hidden_neurons_count as usize, arch.hidden_neurons_count as usize, Activation::Sigmoid));
+    }
+    net.add_layer(Layer::new(arch.output_neurons_count as usize, arch.hidden_neurons_count as usize, Activation::Sigmoid)); // layer n, hidden_neur -> output params
+
+
+    net.print_stats();
+
+
+    let matrix = vec![
+        (vec![0.0, 0.0],  vec![1.0]), (vec![0.0, 0.25],  vec![1.0]), (vec![0.0, 0.5],  vec![1.0]), (vec![0.0, 0.75],  vec![1.0]), (vec![0.0, 1.0],  vec![1.0]),
+        (vec![0.25, 0.0], vec![1.0]), (vec![0.25, 0.25], vec![0.0]), (vec![0.25, 0.5], vec![0.0]), (vec![0.25, 0.75], vec![0.0]), (vec![0.25, 1.0], vec![1.0]),
+        (vec![0.5, 0.0],  vec![1.0]), (vec![0.5, 0.25],  vec![0.0]), (vec![0.5, 0.5],  vec![1.0]), (vec![0.5, 0.75],  vec![0.0]), (vec![0.5, 1.0],  vec![1.0]),
+        (vec![0.75, 0.0], vec![1.0]), (vec![0.75, 0.25], vec![0.0]), (vec![0.75, 0.5], vec![0.0]), (vec![0.75, 0.75], vec![0.0]), (vec![0.75, 1.0], vec![1.0]),
+        (vec![1.0, 0.0],  vec![1.0]), (vec![1.0, 0.25],  vec![1.0]), (vec![1.0, 0.5],  vec![1.0]), (vec![1.0, 0.75],  vec![1.0]), (vec![1.0, 1.0],  vec![1.0]),
+    ];
 
         // XOR example
-    let training_data = vec![
-        (vec![0.0, 0.0], vec![0.0]),
-        (vec![0.0, 1.0], vec![0.5]),
-        (vec![1.0, 0.0], vec![0.5]),
+    let xor = vec![
+        (vec![0.0, 0.0], vec![1.0]),
+        (vec![0.0, 1.0], vec![0.0]),
+        (vec![1.0, 0.0], vec![0.0]),
         (vec![1.0, 1.0], vec![1.0]),
     ];
 
+    println!("decide on dataset: ");
+    println!("   1: 5x5 matrix");
+    println!("   2: XOR");
 
-    for epoch in 0..100000 {
+    let mut buffer: String = String::new();
+    io::stdin().read_line(&mut buffer).expect("Failed to read input");
+    let output = buffer.trim().parse::<u8>().expect("Invalid input");
+
+    let training_data;
+    match output {
+        1 => {
+            training_data = matrix;
+        }
+        2 => {
+            training_data = xor;
+        }
+        _ => {
+            panic!("no training data selected");
+        }
+    }
+    // matrix example
+
+    let mut timer = Instant::now();
+    let mut prev_epoch= 0;
+    for epoch in 0..arch.epochs {
+        // let epoch_start = Instant::now();
         for (inputs, targets) in &training_data {
             net.train(inputs, targets);
         }
-        if epoch % 1000 == 0 {
-            println!("epoch {}", epoch.to_string());
-            println!("loss {}", net.loss(&training_data).to_string());
-            // plot_decision(&net).unwrap();
-            // sleep(Duration::from_millis(500));
+        let loss = net.loss(&training_data);
+        let step = 1000;
+        if epoch % step == 0 {
+            println!("epoch {} of {} | {} done in {} | loss {}", epoch, arch.epochs, epoch - prev_epoch, timer.elapsed().as_secs_f64(), loss);
+            prev_epoch = epoch;
+            timer = Instant::now();
+        }
+        if loss <= 0.0001 {
+            println!("loss is sufficiently low ({}), stopping early", loss);
+            break
         }
     }
 
@@ -250,19 +348,19 @@ fn main() {
         let output = net.forward(inputs.clone());
         println!("{:?} -> {:?}", inputs, output);
     }
-    println!("mapped predictions:");
-    let zero_range = 0.33..0.66;
-    let mut mapped_output;
-    for (inputs, _) in &training_data {
-        let output = net.forward(inputs.clone())[0];
-        if zero_range.contains(&output) {
-            mapped_output = 1;
-        } else {
-            mapped_output = 0;
-        }
-        println!("{:?} -> {:?}", inputs, mapped_output);
-    }
-plot_decision(&net).unwrap();
+    // println!("mapped predictions:");
+    // let zero_range = 0.33..0.66;
+    // let mut mapped_output;
+    // for (inputs, _) in &training_data {
+    //     let output = net.forward(inputs.clone())[0];
+    //     if zero_range.contains(&output) {
+    //         mapped_output = 1;
+    //     } else {
+    //         mapped_output = 0;
+    //     }
+    //     println!("{:?} -> {:?}", inputs, mapped_output);
+    // }
+plot_decision(&net, 0).unwrap();
 
 
 }
