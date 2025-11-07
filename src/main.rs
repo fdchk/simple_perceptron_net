@@ -1,4 +1,4 @@
-use std::{io, time::Instant};
+use std::{fs::File, io::{self, Write}, iter::StepBy, time::Instant};
 use plotters::{prelude::*};
 use rand::Rng;
 
@@ -307,11 +307,11 @@ fn main() {
 
 
     let matrix = vec![
-        (vec![0.0, 0.0],  vec![1.0]), (vec![0.0, 0.25],  vec![1.0]), (vec![0.0, 0.5],  vec![1.0]), (vec![0.0, 0.75],  vec![1.0]), (vec![0.0, 1.0],  vec![1.0]),
+        (vec![0.0, 0.0],  vec![0.0]), (vec![0.0, 0.25],  vec![1.0]), (vec![0.0, 0.5],  vec![0.0]), (vec![0.0, 0.75],  vec![1.0]), (vec![0.0, 1.0],  vec![0.0]),
         (vec![0.25, 0.0], vec![1.0]), (vec![0.25, 0.25], vec![0.0]), (vec![0.25, 0.5], vec![0.0]), (vec![0.25, 0.75], vec![0.0]), (vec![0.25, 1.0], vec![1.0]),
-        (vec![0.5, 0.0],  vec![1.0]), (vec![0.5, 0.25],  vec![0.0]), (vec![0.5, 0.5],  vec![1.0]), (vec![0.5, 0.75],  vec![0.0]), (vec![0.5, 1.0],  vec![1.0]),
+        (vec![0.5, 0.0],  vec![0.0]), (vec![0.5, 0.25],  vec![0.0]), (vec![0.5, 0.5],  vec![1.0]), (vec![0.5, 0.75],  vec![0.0]), (vec![0.5, 1.0],  vec![0.0]),
         (vec![0.75, 0.0], vec![1.0]), (vec![0.75, 0.25], vec![0.0]), (vec![0.75, 0.5], vec![0.0]), (vec![0.75, 0.75], vec![0.0]), (vec![0.75, 1.0], vec![1.0]),
-        (vec![1.0, 0.0],  vec![1.0]), (vec![1.0, 0.25],  vec![1.0]), (vec![1.0, 0.5],  vec![1.0]), (vec![1.0, 0.75],  vec![1.0]), (vec![1.0, 1.0],  vec![1.0]),
+        (vec![1.0, 0.0],  vec![0.0]), (vec![1.0, 0.25],  vec![1.0]), (vec![1.0, 0.5],  vec![0.0]), (vec![1.0, 0.75],  vec![1.0]), (vec![1.0, 1.0],  vec![0.0]),
     ];
 
         // XOR example
@@ -344,6 +344,9 @@ fn main() {
     }
     // matrix example
 
+    let mut csv: File = File::create("stats.csv").expect("file create failed");
+    let mut buf;
+
     let mut timer = Instant::now();
     let mut prev_epoch= 0;
     for epoch in 0..arch.epochs {
@@ -352,10 +355,15 @@ fn main() {
             net.train(inputs, targets);
         }
         let loss = net.loss(&training_data);
-        let step = arch.epochs / 100000;
+        let mut step_div:String = arch.epochs.to_string();
+        step_div.truncate(4);
+        let step = step_div.parse::<u64>().expect("wrong parse");
         if epoch % step == 0 {
-            println!("epoch {} of {} | {} done in {} | loss {}", epoch, arch.epochs, epoch - prev_epoch, timer.elapsed().as_secs_f64(), loss);
+            println!("epoch {} of {} | {} done in {:.2} | loss {:.8}", epoch, arch.epochs, epoch - prev_epoch, timer.elapsed().as_secs_f64(), loss);
             prev_epoch = epoch;
+            buf = format!("{};{}\n", &epoch, &loss);
+            let towrite = buf.as_bytes();
+            csv.write(towrite).expect("file write error");
             timer = Instant::now();
         }
         if loss <= 0.00001 {
