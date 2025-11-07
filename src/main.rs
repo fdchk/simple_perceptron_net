@@ -24,31 +24,36 @@ impl Activation {
 struct Architecture {
     layer_count: u32,
     input_params_count: u32,
-    hidden_neurons_count: u32,
+    hidden_neurons_count: Vec<u32>,
     hidden_layers_count: u32,
     output_neurons_count: u32,
+    learning_rate: f64,
     epochs: u64
 }
 
 impl Architecture {
-    fn init(
-    ) -> Self {
+    fn init() -> Self {
         let layer_count: u32;
         let input_params_count: u32;
-        let hidden_neurons_count: u32;
+        let mut hidden_neurons_count: Vec<u32> = Vec::new();
         let output_neurons_count: u32;
+        let learning_rate: f64;
         let epochs: u64;
         println!("Network arch wizard");
         println!("--------------------");
         input_params_count = query_user("Enter number of input parameters: (bundled data requires 2, asserted for now)") as u32;
         assert_eq!(input_params_count, 2);
         layer_count = query_user("Total layer count: (2 is sufficient)") as u32;
-        hidden_neurons_count = query_user("Neurons on hidden layers: (2 should be enough for XOR)") as u32;
+        let hidden_layers_count = layer_count - 1;
+        for i in 0..hidden_layers_count {
+            let question = format!("Neurons on layer {}: ", i+1);
+            hidden_neurons_count.push(query_user(&question) as u32);
+        }
         output_neurons_count = query_user("Output count: (bundled data requires 1, asserted for now)") as u32;
         assert_eq!(output_neurons_count, 1);
-        epochs = query_user("Train for how many epochs: (go ham, limit is u64)");
+        epochs = query_user("Train for how many epochs: (go ham, limit is u64)") as u64;
+        learning_rate = query_user("Learning rate: (value is in f64 so mind the format");
 
-        let hidden_layers_count = layer_count - 2;
 
         Architecture{
             layer_count,
@@ -56,16 +61,32 @@ impl Architecture {
             hidden_neurons_count,
             hidden_layers_count,
             output_neurons_count,
+            learning_rate,
             epochs
         }
     }
+
+    fn print(&self) {
+        println!("Network arch:");
+        println!("------------------");
+        println!("Layers:                       {}", self.layer_count);
+        println!("Hidden layers:                {}", self.hidden_layers_count);
+        println!("Input params:                 {}", self.input_params_count);
+        for i in 0..self.hidden_layers_count {
+            println!("Neurons on layer {}:      {}", i+1, self.hidden_neurons_count[i as usize]);
+        }
+        println!("Output neurons:               {}", self.output_neurons_count);
+        println!("Epoch cap:                    {}", self.epochs);
+        println!("Learning rate:                {}", self.learning_rate);
+        println!("------------------");
+    }
 }
 
-fn query_user(question: &str) -> u64 {
+fn query_user(question: &str) -> f64 {
     let mut buffer: String = String::new();
     println!("{}", question);
     io::stdin().read_line(&mut buffer).expect("Failed to read input");
-    let output = buffer.trim().parse::<u64>().expect("Failed to parse input");
+    let output = buffer.trim().parse::<f64>().expect("Failed to parse input");
     output
 }
 
@@ -145,8 +166,8 @@ impl Network {
         Network { layers: Vec::new(), learning_rate }
     }
 
-    fn print_stats(&self) {
-        println!("Network conf:");
+    fn print(&self) {
+        println!("Network actual conf:");
         println!("------------------");
         println!("Layers:");
         println!("------------------");
@@ -273,16 +294,16 @@ fn plot_decision(net: &Network, epoch: i32) -> Result<(), Box<dyn std::error::Er
 
 fn main() {
     let arch = Architecture::init();
-    let mut net = Network::new(0.5);
+    let mut net = Network::new(arch.learning_rate);
 
-    net.add_layer(Layer::new(arch.hidden_neurons_count as usize, arch.input_params_count as usize, Activation::Sigmoid)); // layer 1, input params -> hidden_neur
-    for layer in 0..arch.hidden_layers_count {
-        net.add_layer(Layer::new(arch.hidden_neurons_count as usize, arch.hidden_neurons_count as usize, Activation::Sigmoid));
+    net.add_layer(Layer::new(arch.hidden_neurons_count[0 as usize] as usize, arch.input_params_count as usize, Activation::Sigmoid)); // layer 1, input params -> hidden_neur
+    for layer in 0..arch.hidden_layers_count-1 {
+        net.add_layer(Layer::new(arch.hidden_neurons_count[(layer+1) as usize] as usize, arch.hidden_neurons_count[layer as usize] as usize, Activation::Sigmoid));
     }
-    net.add_layer(Layer::new(arch.output_neurons_count as usize, arch.hidden_neurons_count as usize, Activation::Sigmoid)); // layer n, hidden_neur -> output params
+    net.add_layer(Layer::new(arch.output_neurons_count as usize, *arch.hidden_neurons_count.last().expect("array malfunction") as usize, Activation::Sigmoid)); // layer n, hidden_neur -> output params
 
-
-    net.print_stats();
+    arch.print();
+    net.print();
 
 
     let matrix = vec![
@@ -331,14 +352,14 @@ fn main() {
             net.train(inputs, targets);
         }
         let loss = net.loss(&training_data);
-        let step = 1000;
+        let step = arch.epochs / 100000;
         if epoch % step == 0 {
             println!("epoch {} of {} | {} done in {} | loss {}", epoch, arch.epochs, epoch - prev_epoch, timer.elapsed().as_secs_f64(), loss);
             prev_epoch = epoch;
             timer = Instant::now();
         }
-        if loss <= 0.0001 {
-            println!("loss is sufficiently low ({}), stopping early", loss);
+        if loss <= 0.00001 {
+            println!("loss is sufficiently low ({})", loss);
             break
         }
     }
